@@ -715,4 +715,85 @@ describe("MapIconTooltip objective wording", function()
             }, rendered)
         end)
     end)
+
+    describe("source names and drop rates", function()
+        local rendered
+
+        before_each(function()
+            rendered = {}
+            local layout = QuestieLoader:ImportModule("TooltipLayout")
+            layout.CreateRows = function()
+                local function Add(_, text) rendered[#rendered + 1] = text end
+                return {AddLine = Add, AddDoubleLine = Add}
+            end
+            QuestieLoader:ImportModule("QuestieReputation").GetReputationReward = function() return {} end
+        end)
+
+        ---@return string?
+        local function RowContaining(text)
+            for _, line in ipairs(rendered) do
+                if line:find(text, 1, true) then
+                    return line
+                end
+            end
+        end
+
+        it("always shows the source mob name without holding Shift", function()
+            MapIconTooltip.Show(icon)
+
+            assert.is_not_nil(RowContaining("Windstone"))
+        end)
+
+        it("stores and renders a drop-rate suffix on the source name for item objectives", function()
+            objective.Id = 1234
+            icon.data.ObjectiveTargetId = 5678
+            QuestieLoader:ImportModule("QuestieDB").GetItemDroprate = function(itemId, npcId)
+                assert.are.equal(1234, itemId)
+                assert.are.equal(5678, npcId)
+                -- Rates in [2, 10) keep one decimal via FormatDropText (same as world tooltips)
+                return {7.5, "questie"}
+            end
+
+            MapIconTooltip.Show(icon)
+
+            local tipRow = GameTooltip.questOrder[1][1]
+            local textKey = next(tipRow)
+            assert.are.equal("  |cFF999999[7.5%]|r", tipRow[textKey]["Windstone"])
+            assert.is_not_nil(RowContaining("[7.5%]"))
+        end)
+
+        it("omits drop rates when enableTooltipDroprates is disabled", function()
+            Questie.db.profile.enableTooltipDroprates = false
+            objective.Id = 1234
+            icon.data.ObjectiveTargetId = 5678
+            QuestieLoader:ImportModule("QuestieDB").GetItemDroprate = function()
+                return {50, "questie"}
+            end
+
+            MapIconTooltip.Show(icon)
+
+            local tipRow = GameTooltip.questOrder[1][1]
+            local textKey = next(tipRow)
+            assert.are.equal("", tipRow[textKey]["Windstone"])
+            assert.is_nil(RowContaining("[50%]"))
+        end)
+
+        it("does not look up drop rates for non-item objectives", function()
+            objective.Type = "monster"
+            objective.Id = 999
+            icon.data.ObjectiveTargetId = 111
+            local called = false
+            QuestieLoader:ImportModule("QuestieDB").GetItemDroprate = function()
+                called = true
+                return {10, "questie"}
+            end
+
+            MapIconTooltip.Show(icon)
+
+            assert.is_false(called)
+            local tipRow = GameTooltip.questOrder[1][1]
+            local textKey = next(tipRow)
+            assert.are.equal("", tipRow[textKey]["Windstone"])
+        end)
+    end)
 end)
