@@ -25,11 +25,7 @@ function TrackerQuestTimers:Initialize()
 
     if QuestTimerFrame then
         QuestTimerFrame:HookScript("OnShow", function()
-            if Questie.db.profile.showBlizzardQuestTimer then
-                TrackerQuestTimers:ShowBlizzardTimer()
-            else
-                TrackerQuestTimers:HideBlizzardTimer()
-            end
+            TrackerQuestTimers:HideBlizzardTimer()
         end)
     end
 
@@ -61,7 +57,6 @@ function TrackerQuestTimers:UpdateAndGetRemainingTime(quest, frame, clear)
     local timeRemainingString, timeRemaining = TrackerQuestTimers:GetRemainingTimeByQuestId(quest.Id)
 
     if (timeRemainingString == nil) then
-        quest.timedBlizzardQuest = nil
         quest.trackTimedQuest = false
         return nil
     end
@@ -76,15 +71,8 @@ function TrackerQuestTimers:UpdateAndGetRemainingTime(quest, frame, clear)
     end
 
     if timeRemaining then
-        if Questie.db.profile.showBlizzardQuestTimer then
-            TrackerQuestTimers:ShowBlizzardTimer()
-            quest.timedBlizzardQuest = true
-            quest.trackTimedQuest = false
-        else
-            TrackerQuestTimers:HideBlizzardTimer()
-            quest.timedBlizzardQuest = false
-            quest.trackTimedQuest = true
-        end
+        TrackerQuestTimers:HideBlizzardTimer()
+        quest.trackTimedQuest = true
     end
 
     return timeRemainingString, timeRemaining

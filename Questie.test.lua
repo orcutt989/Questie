@@ -244,7 +244,7 @@ describe("Questie", function()
             originalExpansion = expansions.Current
             Questie.IsForever = true
             expansions.Current = expansions.Era
-            Questie.db.profile = {trackerEnabled = true, showBlizzardQuestTimer = false}
+            Questie.db.profile = {trackerEnabled = true}
             QuestieCompat.HideWatchFrame = spy.new(function() end)
             QuestieCompat.ShowWatchFrame = spy.new(function() end)
             dofile("Questie.lua")
