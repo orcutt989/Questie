@@ -23,6 +23,8 @@ local l10n = QuestieLoader:ImportModule("l10n")
 local QuestieCorrections = QuestieLoader:ImportModule("QuestieCorrections")
 ---@type QuestieCombatQueue
 local QuestieCombatQueue = QuestieLoader:ImportModule("QuestieCombatQueue")
+---@type QuestiePopup
+local QuestiePopup = QuestieLoader:ImportModule("QuestiePopup")
 ---@type AvailableQuests
 local AvailableQuests = QuestieLoader:ImportModule("AvailableQuests")
 ---@type Townsfolk
@@ -372,6 +374,20 @@ local div = { -- from libEasyMenu code
         tFitDropDownSizeX = true
     },
 }
+-- On Forever ReloadUI is blocked when called from the dropdown's click handler, so the reload happens in this dialog's button
+QuestiePopup.Dialogs["QUESTIE_MENU_RELOAD_UI"] = {
+    text = "", -- we set it in OnShow
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function()
+        ReloadUI()
+    end,
+    OnShow = function(self)
+        self.Text:SetText(l10n("Reload UI") .. "?")
+    end,
+    hideOnEscape = true,
+}
+
 local secondaryProfessions = {
     [professionKeys.ARCHAEOLOGY] = true,
     [professionKeys.FIRST_AID] = true,
@@ -462,11 +478,11 @@ function QuestieMenu:Show(hideDelay)
         tinsert(menuTable, build("Moonwell"))
     end
     tinsert(menuTable, { text= l10n("Available Quest"), func = function()
-        local value = not Questie.db.profile.enableAvailable
-        Questie.db.profile.enableAvailable = value
+        local value = not Questie.db.profile.showAvailableQuests
+        Questie.db.profile.showAvailableQuests = value
         QuestieQuest:ToggleNotes(value)
         QuestieQuest:SmoothReset()
-    end, icon=QuestieLib.AddonPath.."Icons\\available.blp", notCheckable=false, checked=Questie.db.profile.enableAvailable, isNotRadio=true, keepShownOnClick=true})
+    end, icon=QuestieLib.AddonPath.."Icons\\available.blp", notCheckable=false, checked=Questie.db.profile.showAvailableQuests, isNotRadio=true, keepShownOnClick=true})
     tinsert(menuTable, { text= l10n("Trivial Quest"), func = function()
         local value = Questie.db.profile.lowLevelStyle == Questie.LOWLEVEL_ALL
         if value then
@@ -528,7 +544,14 @@ function QuestieMenu:Show(hideDelay)
     end})
 
     if Questie.db.profile.debugEnabled then
-        tinsert(menuTable, { text= l10n('Reload UI'), func=function() ReloadUI() end})
+        tinsert(menuTable, { text= l10n('Reload UI'), func=function()
+            if Questie.IsForever then
+                -- With Forever the ReloadUI API is restricted with "#hwevent", which means it needs a direct user interaction (e.g. a button click).
+                QuestiePopup.Show("QUESTIE_MENU_RELOAD_UI")
+            else
+                ReloadUI()
+            end
+        end})
     end
     tinsert(menuTable, {text= CANCEL, func=function() end})
     LibDropDown:EasyMenu(menuTable, QuestieMenu.menu, "cursor", -80, -15, "MENU", hideDelay or 2)
