@@ -802,6 +802,102 @@ describe("QuestieQuest", function()
             assert.is_false(quest.Objectives[2].Completed)
         end)
 
+        it("completes requiredSourceItem special objectives from bag count and keeps them complete after consume", function()
+            -- Ishamuhale: Fresh Zhevra Carcass (10338) is requiredSourceItems, not a quest-log row.
+            local itemCounts = {[10338] = 0}
+            stub(QuestieLoader:ImportModule("QuestieCompat"), "GetItemCount", function(itemId)
+                return itemCounts[itemId] or 0
+            end)
+            local special = {Type = "item", Id = 10338, Description = "Fresh Zhevra Carcass", IsRequiredSourceItem = true}
+            local quest = {
+                Id = 882, ObjectiveData = {{Id = 5101, Type = "item"}}, Objectives = {},
+                SpecialObjectives = {[10338] = special}, requiredSourceItems = {10338},
+            }
+            QuestieQuest.GetAllLeaderBoardDetails = function()
+                return {{type = "item", text = "Ishamuhale's Fang: 0/1", numFulfilled = 0, numRequired = 1}}
+            end
+
+            QuestieQuest:PopulateQuestLogInfo(quest)
+            special:Update()
+            assert.is_false(special.Completed)
+            assert.are.equal(0, special.Collected)
+
+            itemCounts[10338] = 1
+            special:Update()
+            assert.is_true(special.Completed)
+            assert.are.equal(1, special.Collected)
+
+            -- Using the carcass at the dead tree consumes it; pips must stay cleared.
+            itemCounts[10338] = 0
+            special:Update()
+            assert.is_true(special.Completed)
+        end)
+
+        it("does not apply sticky bag completion to item extraObjectives that are not requiredSourceItems", function()
+            stub(QuestieLoader:ImportModule("QuestieCompat"), "GetItemCount", function()
+                return 5
+            end)
+            local special = {Type = "item", Id = 999, Description = "Extra item objective"}
+            local quest = {
+                Id = 42, ObjectiveData = {{Id = 100, Type = "monster"}}, Objectives = {},
+                SpecialObjectives = {[1] = special},
+            }
+            QuestieQuest.GetAllLeaderBoardDetails = function()
+                return {{type = "monster", text = "Wolf slain: 0/1", numFulfilled = 0, numRequired = 1}}
+            end
+
+            QuestieQuest:PopulateQuestLogInfo(quest)
+            special:Update()
+
+            assert.is_nil(special.Completed)
+            assert.is_nil(special.Collected)
+        end)
+
+        it("unloads requiredSourceItem map icons through UpdateRequiredSourceItemObjectives after loot", function()
+            local itemCounts = {[10338] = 0}
+            stub(QuestieLoader:ImportModule("QuestieCompat"), "GetItemCount", function(itemId)
+                return itemCounts[itemId] or 0
+            end)
+            local QuestieFramePool = QuestieLoader:ImportModule("QuestieFramePool")
+            local originalUnloadFrame = QuestieFramePool.UnloadFrame
+            QuestieFramePool.UnloadFrame = spy.new(function() end)
+            local originalThread = QuestieLoader:ImportModule("ThreadLib").ThreadCallbackInstant
+            QuestieLoader:ImportModule("ThreadLib").ThreadCallbackInstant = function(work)
+                local co = coroutine.create(work)
+                while coroutine.status(co) ~= "dead" do
+                    assert.is_true(coroutine.resume(co))
+                end
+            end
+            stub(QuestieLoader:ImportModule("QuestieTooltips"), "RegisterObjectiveTooltip", function() end)
+            QuestieQuest.ShouldShowQuestNotes = function() return true end
+
+            local mapIcon, miniIcon = {}, {}
+            local special = {
+                Type = "item", Id = 10338, Description = "Fresh Zhevra Carcass", IsRequiredSourceItem = true,
+                spawnList = {[1] = {Id = 1, Name = "Zhevra", Spawns = {[17] = {{50, 50}}}, GetIconScale = function() return 1 end}},
+                AlreadySpawned = {[1] = {mapRefs = {mapIcon}, minimapRefs = {miniIcon}}},
+            }
+            local quest = {
+                Id = 882, ObjectiveData = {}, Objectives = {},
+                SpecialObjectives = {[10338] = special}, requiredSourceItems = {10338},
+            }
+            QuestieQuest.GetAllLeaderBoardDetails = function() return {} end
+            QuestieQuest:PopulateQuestLogInfo(quest)
+            ActiveQuests.Add(882, quest)
+
+            itemCounts[10338] = 1
+            QuestieQuest:UpdateRequiredSourceItemObjectives()
+            local unloadFrame = QuestieFramePool.UnloadFrame
+
+            assert.is_true(special.Completed)
+            assert.are.equal(mapIcon, unloadFrame.calls[1].refs[2])
+            assert.are.equal(miniIcon, unloadFrame.calls[2].refs[2])
+            assert.are_same({}, special.AlreadySpawned)
+
+            QuestieFramePool.UnloadFrame = originalUnloadFrame
+            QuestieLoader:ImportModule("ThreadLib").ThreadCallbackInstant = originalThread
+        end)
+
         it("does not warn for a log objective with no objective data table", function()
             QuestieQuest.GetAllLeaderBoardDetails = function()
                 return {{type = "log", text = "Read the note."}}
